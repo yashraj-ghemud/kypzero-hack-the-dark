@@ -325,6 +325,27 @@ app.get('/admin/mail-log', async (c) => {
   });
 });
 
+// Registers MAIL_FROM as a Brevo sender. Brevo then emails a verification to that address.
+app.post('/admin/sender', async (c) => {
+  const res = await fetch('https://api.brevo.com/v3/senders', {
+    method: 'POST',
+    headers: { 'api-key': c.env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ name: 'KYPZERO', email: c.env.MAIL_FROM }),
+  });
+  return c.json({ status: res.status, body: await res.json().catch(() => null) });
+});
+
+// Confirms the sender with the code from Brevo's verification email.
+app.post('/admin/sender/validate', async (c) => {
+  const { id, otp } = await body(c);
+  const res = await fetch(`https://api.brevo.com/v3/senders/${encodeURIComponent(id)}/validate`, {
+    method: 'PUT',
+    headers: { 'api-key': c.env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ otp: Number(otp) }),
+  });
+  return c.json({ status: res.status, body: await res.text() });
+});
+
 app.post('/admin/events', async (c) => {
   const ev = cleanEvent(await body(c), { id: hex(5), createdAt: new Date().toISOString() });
   await saveEvent(c.env.DB, ev);
