@@ -7,6 +7,7 @@ The story, shot list, world map and architecture are in **[PLAN.md](PLAN.md)**.
 
 ```bash
 npm install
+cp .env.example .env   # then fill in the values
 npm start
 ```
 
@@ -14,25 +15,36 @@ npm start
 - Admin (control room): http://localhost:3000/admin, log in with `ADMIN_KEY` from `.env`
 - Skip the intro while developing: http://localhost:3000/?skip (add `#events`, `#about` or `#contact` to land on a section)
 
-## Turn on real emails (kypzerorg@gmail.com)
+## Going live on Render (free)
 
-Until this is done the server runs in **dry-run** mode: registrations are saved, and emails are only printed in the terminal.
+The repo deploys as a Render **web service**: build `npm ci`, start `npm start`, health check `/healthz`.
+Render's free plan wipes files on every restart and blocks email (SMTP) ports, so two free services handle data and email.
 
-1. Sign in to **kypzerorg@gmail.com** → [myaccount.google.com/security](https://myaccount.google.com/security) → turn on **2-Step Verification**.
-2. Open [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), create an app password named `kypzero`, and copy the 16-character code.
-3. Paste it into `.env`:
-   ```
-   GMAIL_APP_PASSWORD=abcdefghijklmnop
-   ```
-4. Restart the server. The terminal should print `Mail: connected as kypzerorg@gmail.com`.
-5. In `/admin`, click **SEND TEST EMAIL**. It should arrive in the kypzerorg inbox.
+### 1. MongoDB Atlas (permanent data)
+1. Sign up at [mongodb.com/cloud/atlas/register](https://www.mongodb.com/cloud/atlas/register) and create a free **M0** cluster.
+2. **Database Access** → add a database user with a password.
+3. **Network Access** → add IP `0.0.0.0/0` (Render's IPs change).
+4. **Connect** → Drivers → copy the `mongodb+srv://...` string, put the user's password in it, and set it as `MONGODB_URI`.
 
-After that, every registration sends:
-- a themed confirmation (with ticket number) **to the participant**, from kypzerorg@gmail.com
-- a notification with the participant's details **to kypzerorg@gmail.com**
+On first start the three starter events from `data/events.json` are copied into the database once.
+Without `MONGODB_URI` on Render, the site still runs, but the registration and contact forms are paused so nothing is silently lost.
 
-Contact-form messages go to kypzerorg@gmail.com (reply-to = the sender), and the sender gets an auto-reply.
-Gmail allows roughly 500 emails per day from a normal account.
+### 2. Brevo (email over HTTPS, 300 emails/day free)
+1. Sign up at [brevo.com](https://www.brevo.com) with **kypzerorg@gmail.com**.
+2. **Senders, domains & dedicated IPs** → Senders → add and verify `kypzerorg@gmail.com`.
+3. **SMTP & API** → API keys → create a key and set it as `BREVO_API_KEY`.
+4. In `/admin`, click **SEND TEST EMAIL**.
+
+## Email when running locally (Gmail)
+
+Locally you can use Gmail instead of Brevo:
+
+1. On **kypzerorg@gmail.com**, turn on **2-Step Verification** at [myaccount.google.com/security](https://myaccount.google.com/security).
+2. Create an app password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) and paste it into `.env` as `GMAIL_APP_PASSWORD`.
+3. Restart and use **SEND TEST EMAIL** in `/admin`.
+
+If neither key is set, emails are only printed in the terminal (dry-run).
+Every registration sends a themed confirmation with a ticket number to the participant, and a notification to kypzerorg@gmail.com.
 
 ## Managing events
 
@@ -44,25 +56,20 @@ In `/admin`:
 
 New events show up on the Events tab **and are engraved on the 3D monoliths** (up to 10).
 
-## Configuration (`.env`)
+## Configuration (`.env` locally, Environment tab on Render)
 
 | Key | Meaning |
 |---|---|
-| `PORT` | Server port (default 3000) |
+| `PORT` | Server port (Render sets this itself) |
 | `SITE_URL` | Public URL, used in email footers |
-| `GMAIL_USER` | Gmail account that sends mail |
-| `GMAIL_APP_PASSWORD` | 16-character App Password for that account |
+| `GMAIL_USER` | Address emails are sent from |
 | `ORG_EMAIL` | Where notifications go |
+| `BREVO_API_KEY` | Brevo API key (email over HTTPS) |
+| `GMAIL_APP_PASSWORD` | Gmail App Password (email over SMTP) |
+| `MONGODB_URI` | MongoDB connection string; empty = JSON files in `data/` |
 | `ADMIN_KEY` | Password for `/admin` |
 
-## Data
-
-Stored as JSON in `data/`: `events.json`, `registrations.json`, `messages.json`. Back these files up.
-
-## Deploying
-
-Any Node host with a persistent disk works (Render, Railway, a VPS…). Set the `.env` values as environment variables,
-point `SITE_URL` at your domain, and run `npm start`. Serverless hosts with read-only file systems (such as Vercel) won't keep the JSON data.
+Never commit `.env`; it is in `.gitignore`.
 
 ## Controls
 

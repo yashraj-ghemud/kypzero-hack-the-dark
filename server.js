@@ -16,12 +16,18 @@ const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
 const DATA_DIR = path.join(__dirname, 'data');
 
 /* ------------------------------------------------------------------ */
-/* Storage: JSON files behind a single write queue                    */
+/* Storage: MongoDB when MONGODB_URI is set, otherwise JSON files.    */
+/* Every write goes through one queue, so read-modify-write is safe.  */
 /* ------------------------------------------------------------------ */
 const FILES = { events: 'events.json', registrations: 'registrations.json', messages: 'messages.json' };
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const ON_RENDER = !!process.env.RENDER;
+// Render's free disk is wiped on restart, so never accept registrations there without a database.
+const STORAGE_READY = !!MONGODB_URI || !ON_RENDER;
 let queue = Promise.resolve();
+let db = null;
 
-async function read(name) {
+async function readFile(name) {
   try {
     return JSON.parse(await fs.readFile(path.join(DATA_DIR, FILES[name]), 'utf8'));
   } catch (e) {
@@ -30,16 +36,55 @@ async function read(name) {
   }
 }
 
+async function read(name) {
+  if (!db) return readFile(name);
+  return db.collection(name).find({}, { projection: { _id: 0 } }).toArray();
+}
+
+async function write(name, before, after) {
+  if (!db) {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(path.join(DATA_DIR, FILES[name]), JSON.stringify(after, null, 2));
+    return;
+  }
+  // Only touch documents that changed, so one bad write can't wipe a collection.
+  const col = db.collection(name);
+  const old = new Map(before.map((d) => [d.id, JSON.stringify(d)]));
+  const ops = after
+    .filter((d) => old.get(d.id) !== JSON.stringify(d))
+    .map((d) => ({ replaceOne: { filter: { id: d.id }, replacement: d, upsert: true } }));
+  const keep = new Set(after.map((d) => d.id));
+  const gone = before.filter((d) => !keep.has(d.id)).map((d) => d.id);
+  if (gone.length) ops.push({ deleteMany: { filter: { id: { $in: gone } } } });
+  if (ops.length) await col.bulkWrite(ops);
+}
+
 function mutate(name, fn) {
   const run = queue.then(async () => {
     const data = await read(name);
+    const before = structuredClone(data);
     const result = await fn(data);
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(path.join(DATA_DIR, FILES[name]), JSON.stringify(data, null, 2));
+    await write(name, before, data);
     return result;
   });
   queue = run.catch(() => {});
   return run;
+}
+
+async function connectDb() {
+  if (!MONGODB_URI) return;
+  const { MongoClient } = await import('mongodb');
+  const client = new MongoClient(MONGODB_URI);
+  await client.connect();
+  db = client.db(process.env.MONGODB_DB || 'kypzero');
+  for (const name of Object.keys(FILES)) await db.collection(name).createIndex({ id: 1 }, { unique: true });
+  // First start: copy the starter events from data/events.json, once.
+  const meta = db.collection('meta');
+  if (!(await meta.findOne({ _id: 'seeded' }))) {
+    const events = await readFile('events');
+    if (events.length && !(await db.collection('events').countDocuments())) await db.collection('events').insertMany(events.map((e) => ({ ...e })));
+    await meta.insertOne({ _id: 'seeded', at: new Date() });
+  }
 }
 
 class HttpError extends Error {
@@ -49,18 +94,39 @@ class HttpError extends Error {
 /* ------------------------------------------------------------------ */
 /* Mail                                                                */
 /* ------------------------------------------------------------------ */
-const transporter = GMAIL_APP_PASSWORD
+// Brevo sends over HTTPS, which works on hosts that block SMTP (like Render's free plan).
+// Otherwise Gmail SMTP with an App Password; otherwise emails are only logged.
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+const FROM_NAME = 'KYPZERO // Sector Zero';
+const transporter = !BREVO_API_KEY && GMAIL_APP_PASSWORD
   ? nodemailer.createTransport({ service: 'gmail', auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD } })
   : null;
+const MAIL_MODE = BREVO_API_KEY ? 'brevo' : transporter ? 'gmail' : 'dry-run';
 
 async function sendMail(opts) {
-  if (!transporter) {
+  try {
+    if (MAIL_MODE === 'brevo') {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          sender: { name: FROM_NAME, email: GMAIL_USER },
+          to: [{ email: opts.to }],
+          ...(opts.replyTo ? { replyTo: { email: opts.replyTo } } : {}),
+          subject: opts.subject,
+          htmlContent: opts.html,
+          textContent: opts.text,
+        }),
+      });
+      if (!res.ok) throw new Error(`Brevo ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      return true;
+    }
+    if (MAIL_MODE === 'gmail') {
+      await transporter.sendMail({ from: `"${FROM_NAME}" <${GMAIL_USER}>`, ...opts });
+      return true;
+    }
     console.log(`[mail:dry-run] to=${opts.to} subject="${opts.subject}"`);
     return false;
-  }
-  try {
-    await transporter.sendMail({ from: `"KYPZERO // Sector Zero" <${GMAIL_USER}>`, ...opts });
-    return true;
   } catch (e) {
     console.error('[mail] failed:', e.message);
     return false;
@@ -187,6 +253,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '100kb' }));
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three'), { maxAge: '7d' }));
 app.use('/vendor/gsap', express.static(path.join(__dirname, 'node_modules/gsap/dist'), { maxAge: '7d' }));
+app.get('/healthz', (req, res) => res.send('ok'));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -209,7 +276,9 @@ app.get('/api/stats', wrap(async (req, res) => {
   res.json({ events: events.length, souls: regs.length, colleges: new Set(regs.map((r) => r.college.toLowerCase())).size });
 }));
 
-app.post('/api/register', limiter(8, 10 * 60 * 1000), wrap(async (req, res) => {
+const paused = (req, res, next) => (STORAGE_READY ? next() : res.status(503).json({ error: 'Registrations open very soon. The servers are still waking up - try again later.' }));
+
+app.post('/api/register', paused, limiter(8, 10 * 60 * 1000), wrap(async (req, res) => {
   const b = req.body || {};
   if (b.website) return res.json({ ok: true, ticket: 'KZ-000000', emailSent: false }); // honeypot
   const name = str(b.name, 80);
@@ -257,7 +326,7 @@ app.post('/api/register', limiter(8, 10 * 60 * 1000), wrap(async (req, res) => {
   res.json({ ok: true, ticket: reg.ticket, emailSent });
 }));
 
-app.post('/api/contact', limiter(5, 10 * 60 * 1000), wrap(async (req, res) => {
+app.post('/api/contact', paused, limiter(5, 10 * 60 * 1000), wrap(async (req, res) => {
   const b = req.body || {};
   if (b.website) return res.json({ ok: true });
   const name = str(b.name, 80);
@@ -288,7 +357,7 @@ app.post('/api/contact', limiter(5, 10 * 60 * 1000), wrap(async (req, res) => {
 }));
 
 // ---- admin ----
-app.get('/api/admin/check', admin, (req, res) => res.json({ ok: true, mail: transporter ? 'live' : 'dry-run', from: GMAIL_USER }));
+app.get('/api/admin/check', admin, (req, res) => res.json({ ok: true, mail: MAIL_MODE === 'dry-run' ? 'dry-run' : 'live', provider: MAIL_MODE, from: GMAIL_USER, storage: db ? 'mongodb' : 'files', storageReady: STORAGE_READY }));
 
 app.post('/api/admin/test-mail', admin, wrap(async (req, res) => {
   const sent = await sendMail({
@@ -296,7 +365,7 @@ app.post('/api/admin/test-mail', admin, wrap(async (req, res) => {
     text: 'If you can read this, email delivery works.',
     html: shell('<p style="margin:0">If you can read this, email delivery works. The pact emails will arrive like this one.</p>'),
   });
-  res.json({ ok: sent, mail: transporter ? 'live' : 'dry-run' });
+  res.json({ ok: sent, mail: MAIL_MODE === 'dry-run' ? 'dry-run' : 'live' });
 }));
 
 app.post('/api/admin/events', admin, wrap(async (req, res) => {
@@ -367,16 +436,22 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong in the dark. Try again.' });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n  KYPZERO is awake on ${SITE_URL}`);
-  console.log(`  Admin control room: ${SITE_URL}/admin`);
-  if (!ADMIN_KEY) console.log('  ! ADMIN_KEY is not set in .env - admin is locked.');
-  if (!transporter) {
-    console.log('  ! GMAIL_APP_PASSWORD not set - emails are logged, not sent (dry-run).');
-  } else {
-    transporter.verify()
-      .then(() => console.log(`  Mail: connected as ${GMAIL_USER}`))
-      .catch((e) => console.log(`  ! Mail login failed: ${e.message}`));
-  }
-  console.log('');
-});
+connectDb()
+  .catch((e) => {
+    console.error(`  ! MongoDB connection failed: ${e.message}`);
+    process.exit(1);
+  })
+  .then(() => app.listen(PORT, () => {
+    console.log(`\n  KYPZERO is awake on ${SITE_URL}`);
+    console.log(`  Admin control room: ${SITE_URL}/admin`);
+    console.log(`  Storage: ${db ? 'MongoDB' : 'JSON files in data/'}${STORAGE_READY ? '' : ' - REGISTRATIONS PAUSED (set MONGODB_URI)'}`);
+    if (!ADMIN_KEY) console.log('  ! ADMIN_KEY is not set - admin is locked.');
+    if (MAIL_MODE === 'brevo') console.log(`  Mail: Brevo API, sending as ${GMAIL_USER}`);
+    else if (MAIL_MODE === 'dry-run') console.log('  ! No BREVO_API_KEY or GMAIL_APP_PASSWORD - emails are logged, not sent (dry-run).');
+    else {
+      transporter.verify()
+        .then(() => console.log(`  Mail: Gmail SMTP as ${GMAIL_USER}`))
+        .catch((e) => console.log(`  ! Mail login failed: ${e.message}`));
+    }
+    console.log('');
+  }));

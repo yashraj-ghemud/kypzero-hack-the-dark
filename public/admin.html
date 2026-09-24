@@ -34,7 +34,10 @@
       </div>
     </header>
     <div id="mail-warn" class="banner" hidden>
-      Emails are <b>not being sent</b> (dry-run). Add a Gmail App Password for <b>kypzerorg@gmail.com</b> to <code>GMAIL_APP_PASSWORD</code> in <code>.env</code> and restart the server. Steps are in README.md.
+      Emails are <b>not being sent</b> (dry-run). Set <code>BREVO_API_KEY</code> (hosted) or <code>GMAIL_APP_PASSWORD</code> (local) and restart. Steps are in README.md.
+    </div>
+    <div id="store-warn" class="banner" hidden>
+      <b>Registrations are paused</b>: this server has no permanent database. Set <code>MONGODB_URI</code> and redeploy.
     </div>
 
     <main class="grid">

@@ -35,7 +35,8 @@
     $('#login').hidden = true;
     $('#app').hidden = false;
     const live = info.mail === 'live';
-    $('#mail-status').textContent = live ? `MAIL LIVE · ${info.from}` : 'MAIL DRY-RUN';
+    $('#mail-status').textContent = live ? `MAIL LIVE (${info.provider}) · ${info.from}` : 'MAIL DRY-RUN';
+    $('#store-warn').hidden = info.storageReady;
     $('#mail-status').className = `pill ${live ? 'live' : 'dry'}`;
     $('#mail-warn').hidden = live;
     await Promise.all([loadEvents(), loadRegs(), loadMessages()]);
