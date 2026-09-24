@@ -310,6 +310,21 @@ app.post('/admin/test-mail', async (c) => {
   return c.json({ ok: sent, mail: c.env.BREVO_API_KEY ? 'live' : 'dry-run' });
 });
 
+// Delivery log from Brevo: shows whether each email was sent, delivered, bounced or blocked.
+app.get('/admin/mail-log', async (c) => {
+  if (!c.env.BREVO_API_KEY) return c.json({ error: 'BREVO_API_KEY is not set.' }, 400);
+  const headers = { 'api-key': c.env.BREVO_API_KEY, Accept: 'application/json' };
+  const [events, senders] = await Promise.all([
+    fetch('https://api.brevo.com/v3/smtp/statistics/events?limit=30&sort=desc', { headers }).then((r) => r.json()),
+    fetch('https://api.brevo.com/v3/senders', { headers }).then((r) => r.json()),
+  ]);
+  return c.json({
+    senders: (senders.senders || []).map((s) => ({ email: s.email, active: s.active })),
+    events: (events.events || []).map((e) => ({ date: e.date, event: e.event, email: e.email, subject: e.subject, reason: e.reason })),
+    raw: events.events ? undefined : events,
+  });
+});
+
 app.post('/admin/events', async (c) => {
   const ev = cleanEvent(await body(c), { id: hex(5), createdAt: new Date().toISOString() });
   await saveEvent(c.env.DB, ev);
