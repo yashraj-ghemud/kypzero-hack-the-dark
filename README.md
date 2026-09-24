@@ -3,73 +3,77 @@
 A cinematic, story-driven 3D horror website for running hackathons.
 The story, shot list, world map and architecture are in **[PLAN.md](PLAN.md)**.
 
-## Run it
+**Live:** https://kypzero.pages.dev · **Admin:** https://kypzero.pages.dev/admin
+
+## Stack
+
+- **Frontend:** Three.js + GSAP, no bundler (`public/`)
+- **Backend:** Cloudflare Pages Functions with Hono (`functions/api/[[path]].js`)
+- **Database:** Cloudflare D1 (SQLite), schema and starter events in `migrations/`
+- **Email:** Brevo HTTPS API, sending as kypzerorg@gmail.com
+
+Everything runs on Cloudflare's free plan: no server to keep awake, no card needed.
+
+## Run it locally
 
 ```bash
 npm install
-cp .env.example .env   # then fill in the values
-npm start
+cp .dev.vars.example .dev.vars   # then fill in ADMIN_KEY (and BREVO_API_KEY to send real emails)
+npm run dev
 ```
 
 - Site: http://localhost:3000
-- Admin (control room): http://localhost:3000/admin, log in with `ADMIN_KEY` from `.env`
+- Admin: http://localhost:3000/admin, log in with `ADMIN_KEY` from `.dev.vars`
 - Skip the intro while developing: http://localhost:3000/?skip (add `#events`, `#about` or `#contact` to land on a section)
 
-## Going live on Render (free)
+Local data lives in a local copy of the database under `.wrangler/`, separate from production.
 
-The repo deploys as a Render **web service**: build `npm ci`, start `npm start`, health check `/healthz`.
-Render's free plan wipes files on every restart and blocks email (SMTP) ports, so two free services handle data and email.
+## Deploying
 
-### 1. MongoDB Atlas (permanent data)
-1. Sign up at [mongodb.com/cloud/atlas/register](https://www.mongodb.com/cloud/atlas/register) and create a free **M0** cluster.
-2. **Database Access** → add a database user with a password.
-3. **Network Access** → add IP `0.0.0.0/0` (Render's IPs change).
-4. **Connect** → Drivers → copy the `mongodb+srv://...` string, put the user's password in it, and set it as `MONGODB_URI`.
+**Automatic:** every push to `main` runs `.github/workflows/deploy.yml`, which builds, applies new database migrations, and deploys to Cloudflare Pages.
+It uses the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
-On first start the three starter events from `data/events.json` are copied into the database once.
-Without `MONGODB_URI` on Render, the site still runs, but the registration and contact forms are paused so nothing is silently lost.
+**Manual:** with those two values in your environment, run `npm run deploy`.
 
-### 2. Brevo (email over HTTPS, 300 emails/day free)
-1. Sign up at [brevo.com](https://www.brevo.com) with **kypzerorg@gmail.com**.
-2. **Senders, domains & dedicated IPs** → Senders → add and verify `kypzerorg@gmail.com`.
-3. **SMTP & API** → API keys → create a key and set it as `BREVO_API_KEY`.
-4. In `/admin`, click **SEND TEST EMAIL**.
+## Configuration
 
-## Email when running locally (Gmail)
+Public settings are in `wrangler.toml` under `[vars]`: `MAIL_FROM`, `ORG_EMAIL`, `SITE_URL`, `TIMEZONE`, `TZ_OFFSET`.
+Event dates are entered as local times in that timezone (India by default).
 
-Locally you can use Gmail instead of Brevo:
+Secrets are never committed. In production they are Cloudflare Pages secrets:
 
-1. On **kypzerorg@gmail.com**, turn on **2-Step Verification** at [myaccount.google.com/security](https://myaccount.google.com/security).
-2. Create an app password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) and paste it into `.env` as `GMAIL_APP_PASSWORD`.
-3. Restart and use **SEND TEST EMAIL** in `/admin`.
+```bash
+npx wrangler pages secret put ADMIN_KEY --project-name kypzero
+npx wrangler pages secret put BREVO_API_KEY --project-name kypzero
+```
 
-If neither key is set, emails are only printed in the terminal (dry-run).
-Every registration sends a themed confirmation with a ticket number to the participant, and a notification to kypzerorg@gmail.com.
+Locally they go in `.dev.vars` (ignored by git).
+
+## Email (Brevo)
+
+Every registration sends a themed confirmation with a ticket number to the participant, plus a notification to kypzerorg@gmail.com.
+Contact messages go to kypzerorg@gmail.com and the sender gets an auto-reply. The free plan allows 300 emails per day.
+
+If Brevo has **Authorised IPs** turned on, emails from your own computer during local development are rejected. Production (Cloudflare) is not affected.
+Without `BREVO_API_KEY`, emails are only logged (dry-run).
 
 ## Managing events
 
 In `/admin`:
 - **Summon** (create), **edit**, **seal/open** and **delete** events
-- Set a seat limit and a registration deadline; the site closes registration automatically when either is hit
+- Set a seat limit and a registration deadline; registration closes automatically when either is hit
 - View, search and delete registrations; **export CSV** (all events or one event)
 - Read contact messages
 
 New events show up on the Events tab **and are engraved on the 3D monoliths** (up to 10).
 
-## Configuration (`.env` locally, Environment tab on Render)
+## Database
 
-| Key | Meaning |
-|---|---|
-| `PORT` | Server port (Render sets this itself) |
-| `SITE_URL` | Public URL, used in email footers |
-| `GMAIL_USER` | Address emails are sent from |
-| `ORG_EMAIL` | Where notifications go |
-| `BREVO_API_KEY` | Brevo API key (email over HTTPS) |
-| `GMAIL_APP_PASSWORD` | Gmail App Password (email over SMTP) |
-| `MONGODB_URI` | MongoDB connection string; empty = JSON files in `data/` |
-| `ADMIN_KEY` | Password for `/admin` |
+```bash
+npx wrangler d1 execute kypzero --remote --command "SELECT name, email, college FROM registrations"
+```
 
-Never commit `.env`; it is in `.gitignore`.
+To change the schema, add a new file in `migrations/` (e.g. `0002_something.sql`); the deploy applies it.
 
 ## Controls
 

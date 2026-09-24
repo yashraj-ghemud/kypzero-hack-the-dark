@@ -1,0 +1,19 @@
+name = "kypzero"
+pages_build_output_dir = "public"
+compatibility_date = "2026-09-01"
+
+# Public settings. Secrets (ADMIN_KEY, BREVO_API_KEY) are set with `wrangler pages secret put`
+# in production and in `.dev.vars` locally.
+[vars]
+MAIL_FROM = "kypzerorg@gmail.com"
+ORG_EMAIL = "kypzerorg@gmail.com"
+SITE_URL = "https://kypzero.pages.dev"
+# Event dates are entered as wall-clock times in this timezone.
+TIMEZONE = "Asia/Kolkata"
+TZ_OFFSET = "+05:30"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kypzero"
+database_id = "645dbb93-7cdf-461b-bdaa-3f4fe62c7233"
+migrations_dir = "migrations"

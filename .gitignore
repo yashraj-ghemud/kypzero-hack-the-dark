@@ -1,4 +1,5 @@
 node_modules/
+.dev.vars
+.wrangler/
+public/vendor/
 .env
-data/registrations.json
-data/messages.json

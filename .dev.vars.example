@@ -1,0 +1,11 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+# In production these are Cloudflare Pages secrets: npx wrangler pages secret put NAME --project-name kypzero
+
+# Password for the /admin control room
+ADMIN_KEY=change-me
+
+# Brevo API key for sending email (empty = emails are only logged)
+BREVO_API_KEY=
+
+# Local URL used in email footers
+SITE_URL=http://localhost:3000

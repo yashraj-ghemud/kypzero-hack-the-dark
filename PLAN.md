@@ -207,7 +207,7 @@ hakc/
 ```
 
 - **Frontend:** Three.js + GSAP, served from `node_modules` with an import map, so there's no build step. All textures and sounds are procedural, so there are zero asset downloads.
-- **Backend:** Node + Express; JSON-file storage with a serialized write queue; Nodemailer via Gmail SMTP with an **App Password**. If no password is set, the server runs in *dry-run* mode and logs emails instead of sending them.
+- **Backend:** Cloudflare Pages Functions (Hono) with a D1 (SQLite) database; email through the Brevo HTTPS API. Without a Brevo key, emails are logged instead of sent (dry-run).
 - **API:**
   - `GET  /api/events`, `GET /api/events/:id`, `GET /api/stats`
   - `POST /api/register`, `POST /api/contact` (validated, rate-limited, honeypot)
