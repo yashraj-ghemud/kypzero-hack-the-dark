@@ -1,0 +1,22 @@
+{
+  "name": "kypzero-hack-the-dark",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "KYPZERO - cinematic horror hackathon events website",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.3",
+    "express": "^4.22.3",
+    "gsap": "^3.15.0",
+    "nodemailer": "^10.0.10",
+    "three": "^0.186.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

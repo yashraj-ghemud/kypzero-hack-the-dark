@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Control Room — KYPZERO</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23050203'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23ff3b1f'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <section id="login" class="login">
+    <form id="login-form" class="card login-card">
+      <p class="kicker">SECTOR ZERO // RESTRICTED</p>
+      <h1>CONTROL ROOM</h1>
+      <label class="field"><span>ADMIN KEY</span><input id="key" type="password" autocomplete="current-password" placeholder="from ADMIN_KEY in .env" required></label>
+      <p id="login-err" class="err"></p>
+      <button class="btn primary" type="submit">UNLOCK</button>
+      <a class="back" href="/">← back to the void</a>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <header class="top">
+      <div class="brand"><span class="eye"></span>KYPZERO <small>CONTROL ROOM</small></div>
+      <div class="top-right">
+        <span id="mail-status" class="pill"></span>
+        <button id="test-mail" class="btn small">SEND TEST EMAIL</button>
+        <a class="btn small" href="/" target="_blank">VIEW SITE ↗</a>
+        <button id="logout" class="btn small ghost">LOCK</button>
+      </div>
+    </header>
+    <div id="mail-warn" class="banner" hidden>
+      Emails are <b>not being sent</b> (dry-run). Add a Gmail App Password for <b>kypzerorg@gmail.com</b> to <code>GMAIL_APP_PASSWORD</code> in <code>.env</code> and restart the server. Steps are in README.md.
+    </div>
+
+    <main class="grid">
+      <section class="card">
+        <div class="card-head"><h2 id="form-title">SUMMON A NEW EVENT</h2><button id="form-reset" class="btn small ghost" type="button">CLEAR</button></div>
+        <form id="event-form" class="form">
+          <input type="hidden" name="eid">
+          <label class="field span2"><span>TITLE *</span><input name="title" required maxlength="80" placeholder="NIGHTMARE.EXE"></label>
+          <label class="field span2"><span>TAGLINE</span><input name="tagline" maxlength="160" placeholder="24 hours. No sleep."></label>
+          <label class="field span2"><span>DESCRIPTION</span><textarea name="description" rows="6" maxlength="4000" placeholder="Blank lines become paragraphs."></textarea></label>
+          <label class="field"><span>DATE &amp; TIME *</span><input name="date" type="datetime-local" required></label>
+          <label class="field"><span>REGISTRATION DEADLINE</span><input name="deadline" type="date"></label>
+          <label class="field span2"><span>VENUE</span><input name="venue" maxlength="160" placeholder="Main Auditorium / Online"></label>
+          <label class="field"><span>MODE</span><select name="mode"><option value="offline">offline</option><option value="online">online</option><option value="hybrid">hybrid</option></select></label>
+          <label class="field"><span>STATUS</span><select name="status"><option value="open">open</option><option value="closed">closed (sealed)</option></select></label>
+          <label class="field"><span>PRIZE</span><input name="prize" maxlength="80" placeholder="₹50,000 pool"></label>
+          <label class="field"><span>TEAM SIZE</span><input name="teamSize" maxlength="40" placeholder="2-4 hackers"></label>
+          <label class="field"><span>SEAT LIMIT (0 = unlimited)</span><input name="seats" type="number" min="0" value="0"></label>
+          <label class="field"><span>TAGS (comma separated)</span><input name="tags" placeholder="AI, 24h, open theme"></label>
+          <p id="form-err" class="err span2"></p>
+          <button class="btn primary span2" type="submit" id="form-submit">SUMMON EVENT</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>THE MONOLITHS</h2><span id="ev-count" class="muted"></span></div>
+        <div id="events" class="events"></div>
+      </section>
+
+      <section class="card wide">
+        <div class="card-head">
+          <h2>SOULS BOUND <span id="reg-count" class="muted"></span></h2>
+          <div class="tools">
+            <select id="reg-filter"><option value="">All events</option></select>
+            <input id="reg-search" placeholder="search name / email / college">
+            <button id="csv" class="btn small">EXPORT CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>TICKET</th><th>EVENT</th><th>NAME</th><th>EMAIL</th><th>PHONE</th><th>COLLEGE</th><th>WHEN</th><th></th></tr></thead>
+            <tbody id="regs"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card wide">
+        <div class="card-head"><h2>SIGNALS (CONTACT MESSAGES)</h2></div>
+        <div id="messages" class="messages"></div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

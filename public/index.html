@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KYPZERO — Hack The Dark</title>
+  <meta name="description" content="KYPZERO hackathons. Thirteen coders never logged out. Enter Sector Zero.">
+  <meta name="theme-color" content="#050203">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23050203'/%3E%3Cpath d='M8 32 Q32 10 56 32 Q32 54 8 32Z' fill='none' stroke='%23ff3b1f' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='8' fill='%23ff3b1f'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Rubik+Wet+Paint&family=Share+Tech+Mono&family=Special+Elite&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+  <script src="/vendor/gsap/gsap.min.js"></script>
+</head>
+<body class="is-gate">
+  <canvas id="world" aria-hidden="true"></canvas>
+  <div id="darkness" aria-hidden="true"></div>
+  <div class="letterbox letterbox-top" aria-hidden="true"></div>
+  <div class="letterbox letterbox-bottom" aria-hidden="true"></div>
+  <div id="subtitles" aria-live="polite"></div>
+  <div id="bigtext" class="glitch" aria-live="polite"></div>
+  <div id="terminal" class="terminal" aria-live="polite"></div>
+  <svg id="crack" class="crack" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice" hidden aria-hidden="true"></svg>
+  <div id="vhs" class="vhs" hidden aria-hidden="true">
+    <span id="vhs-state" class="vhs-state">▶ PLAY</span>
+    <span class="vhs-tape">SP · TAPE 13/13</span>
+    <span class="vhs-stamp"><b>SEP. 13 1999</b><b id="vhs-clock">03:13:07 AM</b></span>
+  </div>
+  <button id="skip" class="skip" hidden>SKIP INTRO <span>▸▸</span></button>
+
+  <!-- ============ GATE ============ -->
+  <div id="gate">
+    <div class="gate-inner">
+      <pre id="boot" class="boot"></pre>
+      <h1 class="gate-title"><span class="glitch" data-text="KYPZERO">KYPZERO</span></h1>
+      <p class="gate-sub">THE HACKATHON THAT NEVER ENDED</p>
+      <div class="gate-actions">
+        <button id="enter" class="btn btn-blood btn-lg" data-cursor="ENTER"><span>ENTER THE SIGNAL</span></button>
+        <button id="enter-skip" class="link-btn">skip the story →</button>
+      </div>
+      <p class="warn">⚠ HEADPHONES RECOMMENDED · CONTAINS FLASHING LIGHTS, LOUD SOUNDS &amp; JUMP SCARES</p>
+    </div>
+  </div>
+
+  <!-- ============ HUD ============ -->
+  <header class="hud hud-top">
+    <a class="logo" href="#home" data-go="home" aria-label="KYPZERO home">
+      <svg viewBox="0 0 64 40" aria-hidden="true"><path d="M3 20 Q32 -4 61 20 Q32 44 3 20Z"/><circle cx="32" cy="20" r="7"/></svg>
+      <span>KYPZERO</span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#home" data-go="home"><i>01</i><span class="nav-label">HOME</span></a>
+      <a href="#events" data-go="events"><i>02</i><span class="nav-label">EVENTS</span></a>
+      <a href="#about" data-go="about"><i>03</i><span class="nav-label">ABOUT</span></a>
+      <a href="#contact" data-go="contact"><i>04</i><span class="nav-label">CONTACT</span></a>
+    </nav>
+    <div class="hud-right">
+      <span class="rec"><b></b>REC</span>
+      <span id="timecode" class="timecode">00:00:00:00</span>
+      <button id="sound" class="sound" aria-label="Toggle sound" data-cursor="SOUND"><i></i><i></i><i></i><i></i><i></i></button>
+    </div>
+  </header>
+  <footer class="hud hud-bottom">
+    <span id="coords">SECTOR 0</span>
+    <span class="hint">SCROLL · 1–4 · CLICK THINGS IN THE DARK</span>
+    <span class="signal">SIGNAL <i></i><i></i><i></i><i></i></span>
+  </footer>
+
+  <!-- ============ PANELS ============ -->
+  <main id="panels">
+    <section id="sec-home" class="panel panel-home" aria-label="Home">
+      <p class="kicker" data-reveal>// TRANSMISSION 0x0D — SECTOR ZERO</p>
+      <h2 class="hero-title glitch" data-text="KYPZERO" data-reveal>KYPZERO</h2>
+      <p class="hero-sub" data-reveal>HACK <em>THE</em> DARK</p>
+      <p class="lede" data-reveal>Hackathons from the other side. Thirteen coders never logged out.<br>Now the servers want new blood.</p>
+      <div class="cta-row" data-reveal>
+        <button class="btn btn-blood" data-go="events" data-cursor="ENTER"><span>ENTER THE RITUALS</span></button>
+        <button class="btn btn-ghost" data-go="about" data-cursor="READ"><span>READ THE FILES</span></button>
+      </div>
+      <button id="countdown" class="countdown" data-reveal hidden data-cursor="SIGN">
+        <span class="cd-label">NEXT RITUAL · <span id="cd-name"></span></span>
+        <span id="cd-time" class="cd-time"></span>
+      </button>
+    </section>
+
+    <section id="sec-events" class="panel panel-side panel-right" aria-label="Events">
+      <header class="panel-head">
+        <p class="kicker" data-reveal>02 // THE MONOLITHS</p>
+        <h2 class="panel-title" data-scramble data-reveal>THE RITUALS</h2>
+        <p class="dim" data-reveal>Every event is carved into a monolith. Pick one, read the case file, sign the pact.</p>
+        <div class="filters" data-reveal>
+          <button class="chip is-on" data-filter="all">ALL</button>
+          <button class="chip" data-filter="open">OPEN</button>
+          <button class="chip" data-filter="past">SEALED</button>
+        </div>
+      </header>
+      <div id="events-list" class="events-list"><div class="empty"><p>Listening for signals…</p></div></div>
+    </section>
+
+    <section id="sec-about" class="panel panel-side panel-left" aria-label="About">
+      <header class="panel-head">
+        <p class="kicker" data-reveal>03 // THE CABLE TREE</p>
+        <h2 class="panel-title" data-scramble data-reveal>THE FILES</h2>
+      </header>
+      <div class="story" data-reveal>
+        <p><span class="drop">O</span>n <b>September 13, 1999</b>, thirteen hackers went down into Sector Zero, a server vault under the city, to kill the Millennium Bug before it killed the world.</p>
+        <p>At 03:13 the blast doors sealed. None of them logged out. <em>The servers never stopped running.</em></p>
+        <p>Twenty-seven years later the machines started sending invitations. <b>KYPZERO</b> is the collective that answered.</p>
+      </div>
+      <div class="about-real" data-reveal>
+        <h3 class="h3">WHO WE ARE</h3>
+        <p>KYPZERO is a student-run community that organises hackathons, CTFs and buildathons for people who like building things at 3 AM. We bring mentors, prizes, food and a stage. You bring the code.</p>
+      </div>
+      <div class="stats" data-reveal>
+        <div><b id="stat-events">—</b><span>RITUALS</span></div>
+        <div><b id="stat-souls">—</b><span>SOULS BOUND</span></div>
+        <div><b id="stat-colleges">—</b><span>COLLEGES</span></div>
+      </div>
+      <div class="faq" data-reveal>
+        <h3 class="h3">THE RULES OF THE DARK</h3>
+        <div class="faq-item"><button class="faq-q">Who can join? <i>+</i></button><div class="faq-a"><p>Any student who can write code, design, or break things. Beginners are welcome; the dark doesn't judge.</p></div></div>
+        <div class="faq-item"><button class="faq-q">Do I need a team? <i>+</i></button><div class="faq-a"><p>No. Register solo and find your coven on the day, or bring your own team within the size limit shown on each event.</p></div></div>
+        <div class="faq-item"><button class="faq-q">Does it cost anything? <i>+</i></button><div class="faq-a"><p>Registration is free unless an event's case file says otherwise.</p></div></div>
+        <div class="faq-item"><button class="faq-q">What happens after I register? <i>+</i></button><div class="faq-a"><p>You get a ticket number and a confirmation email from kypzerorg@gmail.com. We'll send final instructions before the event.</p></div></div>
+        <div class="faq-item"><button class="faq-q">What should I bring? <i>+</i></button><div class="faq-a"><p>Laptop, charger, college ID, and the courage to not look behind you.</p></div></div>
+      </div>
+    </section>
+
+    <section id="sec-contact" class="panel panel-side panel-right" aria-label="Contact">
+      <header class="panel-head">
+        <p class="kicker" data-reveal>04 // THE SIGNAL TOWER</p>
+        <h2 class="panel-title" data-scramble data-reveal>SEND A SIGNAL</h2>
+        <p class="dim" data-reveal>Sponsorships, collaborations, questions, or you just saw something in the corridor. We answer from the dark.</p>
+      </header>
+      <form id="contact-form" class="form" novalidate data-reveal>
+        <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label class="field"><span>NAME</span><input name="name" autocomplete="name" maxlength="80" placeholder="Who is transmitting?"><em></em></label>
+        <label class="field"><span>EMAIL</span><input name="email" type="email" autocomplete="email" maxlength="120" placeholder="Where do we answer?"><em></em></label>
+        <label class="field"><span>MESSAGE</span><textarea name="message" rows="4" maxlength="3000" placeholder="Speak into the static…"></textarea><em></em></label>
+        <button class="btn btn-blood btn-full" type="submit" data-cursor="SEND"><span>TRANSMIT</span></button>
+      </form>
+      <div class="direct" data-reveal>
+        <p class="kicker">DIRECT FREQUENCY</p>
+        <a class="mail-link" href="mailto:kypzerorg@gmail.com" data-cursor="MAIL">kypzerorg@gmail.com</a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ MODAL ============ -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Event">
+      <button class="modal-x" data-close aria-label="Close" data-cursor="CLOSE">✕</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
