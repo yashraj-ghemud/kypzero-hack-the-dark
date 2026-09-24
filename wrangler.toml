@@ -5,7 +5,8 @@ compatibility_date = "2026-09-01"
 # Public settings. Secrets (ADMIN_KEY, BREVO_API_KEY) are set with `wrangler pages secret put`
 # in production and in `.dev.vars` locally.
 [vars]
-MAIL_FROM = "kypzerorg@gmail.com"
+# Must be a verified sender in Brevo. Replies go to ORG_EMAIL.
+MAIL_FROM = "viczohacker1@gmail.com"
 ORG_EMAIL = "kypzerorg@gmail.com"
 SITE_URL = "https://kypzero.pages.dev"
 # Event dates are entered as wall-clock times in this timezone.

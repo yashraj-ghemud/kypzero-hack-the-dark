@@ -136,13 +136,18 @@
     $('#regs').innerHTML = list.length ? list.map((r) => `
       <tr><td>${esc(r.ticket)}</td><td>${esc(r.eventTitle)}</td><td>${esc(r.name)}</td>
       <td><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td><td>${esc(r.phone)}</td><td>${esc(r.college)}</td>
-      <td>${fmt(r.createdAt)}</td><td><button class="x" data-rdel="${r.id}" title="Delete">✕</button></td></tr>`).join('')
+      <td>${fmt(r.createdAt)}</td><td><button class="x" data-resend="${r.id}" title="Resend confirmation email">✉</button> <button class="x" data-rdel="${r.id}" title="Delete">✕</button></td></tr>`).join('')
       : '<tr><td colspan="8" class="empty">No souls bound yet.</td></tr>';
   }
 
   $('#reg-filter').addEventListener('change', loadRegs);
   $('#reg-search').addEventListener('input', renderRegs);
   $('#regs').addEventListener('click', async (e) => {
+    const rs = e.target.closest('[data-resend]');
+    if (rs) {
+      try { const r = await api(`/api/admin/registrations/${rs.dataset.resend}/resend`, { method: 'POST' }); toast(r.ok ? `Email resent to ${r.to}` : 'Sending failed. Check the mail log.', r.ok ? '' : 'error'); } catch (err) { toast(err.message, 'error'); }
+      return;
+    }
     const b = e.target.closest('[data-rdel]');
     if (!b || !confirm('Delete this registration?')) return;
     try { await api(`/api/admin/registrations/${b.dataset.rdel}`, { method: 'DELETE' }); await Promise.all([loadRegs(), loadEvents()]); } catch (err) { toast(err.message, 'error'); }

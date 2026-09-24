@@ -555,7 +555,7 @@ export class UI {
         <p>You're registered for <b>${esc(ev.title)}</b>.</p>
         <div class="ticket"><span>YOUR TICKET</span><b>${esc(out.ticket)}</b></div>
         <p class="dim">${out.emailSent
-          ? `A confirmation was sent to <b>${esc(data.email)}</b> from kypzerorg@gmail.com. Check your inbox (and the spam folder, the dark hides things).`
+          ? `A confirmation was sent to <b>${esc(data.email)}</b> from KYPZERO. Check your inbox (and the spam folder, the dark hides things).`
           : 'Your registration is saved. The confirmation email could not be sent right now; we will contact you directly.'}</p>
         <button class="btn btn-ghost" data-close>RETURN TO THE VOID</button>
       </div>`;

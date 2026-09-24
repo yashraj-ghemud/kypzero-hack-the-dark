@@ -10,7 +10,7 @@ The story, shot list, world map and architecture are in **[PLAN.md](PLAN.md)**.
 - **Frontend:** Three.js + GSAP, no bundler (`public/`)
 - **Backend:** Cloudflare Pages Functions with Hono (`functions/api/[[path]].js`)
 - **Database:** Cloudflare D1 (SQLite), schema and starter events in `migrations/`
-- **Email:** Brevo HTTPS API, sending as kypzerorg@gmail.com
+- **Email:** Brevo HTTPS API, sending as the verified sender in `MAIL_FROM` (replies go to kypzerorg@gmail.com)
 
 Everything runs on Cloudflare's free plan: no server to keep awake, no card needed.
 

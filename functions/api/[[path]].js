@@ -111,7 +111,7 @@ async function sendMail(env, opts) {
       body: JSON.stringify({
         sender: { name: 'KYPZERO // Sector Zero', email: env.MAIL_FROM },
         to: [{ email: opts.to }],
-        ...(opts.replyTo ? { replyTo: { email: opts.replyTo } } : {}),
+        replyTo: { email: opts.replyTo || env.ORG_EMAIL },
         subject: opts.subject,
         htmlContent: opts.html,
         textContent: opts.text,
@@ -141,6 +141,29 @@ Sent from <a href="${site}" style="color:#d0142c">${site}</a><br>Questions? Just
 }
 
 const row = (label, value) => `<tr><td style="padding:6px 0;color:#8a7a72;font-size:11px;letter-spacing:2px;width:120px;vertical-align:top">${label}</td><td style="padding:6px 0;color:#e8dcc8">${esc(value)}</td></tr>`;
+
+// The participant's confirmation email (also used by the admin "resend" action).
+function confirmationMail(env, ev, reg) {
+  const { name, email, phone, college } = reg;
+  return {
+    to: email,
+    subject: `Pact sealed: ${ev.title} [${reg.ticket}]`,
+    text: `${name}, the pact is sealed.\n\nYou are registered for ${ev.title}.\nTicket: ${reg.ticket}\nWhen: ${fmtEventDate(ev.date)}\nWhere: ${ev.venue || 'TBA'}\n\n- KYPZERO`,
+    html: shell(env, `
+<p style="margin:0 0 14px">${esc(name)},</p>
+<p style="margin:0 0 18px">The pact is sealed. Your name has been written into the servers of Sector Zero.
+You are registered for <b style="color:#ff3b1f">${esc(ev.title)}</b>.</p>
+<div style="border:1px dashed #b3001b;padding:16px 18px;margin:0 0 20px;text-align:center">
+<div style="font-size:11px;letter-spacing:4px;color:#8a7a72">YOUR TICKET</div>
+<div style="font-size:28px;letter-spacing:6px;color:#ff3b1f;margin-top:6px">${esc(reg.ticket)}</div></div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+${row('EVENT', ev.title)}${row('WHEN', fmtEventDate(ev.date))}${row('WHERE', ev.venue || 'To be announced')}
+${ev.teamSize ? row('TEAM SIZE', ev.teamSize) : ''}${row('NAME', name)}${row('COLLEGE', college)}${row('PHONE', phone)}
+</table>
+<p style="margin:22px 0 0">Keep this ticket. We will contact you with further instructions before the ritual begins.</p>
+<p style="margin:14px 0 0;color:#8a7a72;font-style:italic">Don't look back.</p>`),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Middleware                                                          */
@@ -229,24 +252,7 @@ app.post('/register', limiter(8, 10 * 60 * 1000), async (c) => {
 
   const env = c.env;
   const [emailSent] = await Promise.all([
-    sendMail(env, {
-      to: email,
-      subject: `Pact sealed: ${ev.title} [${reg.ticket}]`,
-      text: `${name}, the pact is sealed.\n\nYou are registered for ${ev.title}.\nTicket: ${reg.ticket}\nWhen: ${fmtEventDate(ev.date)}\nWhere: ${ev.venue || 'TBA'}\n\n- KYPZERO`,
-      html: shell(env, `
-<p style="margin:0 0 14px">${esc(name)},</p>
-<p style="margin:0 0 18px">The pact is sealed. Your name has been written into the servers of Sector Zero.
-You are registered for <b style="color:#ff3b1f">${esc(ev.title)}</b>.</p>
-<div style="border:1px dashed #b3001b;padding:16px 18px;margin:0 0 20px;text-align:center">
-<div style="font-size:11px;letter-spacing:4px;color:#8a7a72">YOUR TICKET</div>
-<div style="font-size:28px;letter-spacing:6px;color:#ff3b1f;margin-top:6px">${esc(reg.ticket)}</div></div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-${row('EVENT', ev.title)}${row('WHEN', fmtEventDate(ev.date))}${row('WHERE', ev.venue || 'To be announced')}
-${ev.teamSize ? row('TEAM SIZE', ev.teamSize) : ''}${row('NAME', name)}${row('COLLEGE', college)}${row('PHONE', phone)}
-</table>
-<p style="margin:22px 0 0">Keep this ticket. We will contact you with further instructions before the ritual begins.</p>
-<p style="margin:14px 0 0;color:#8a7a72;font-style:italic">Don't look back.</p>`),
-    }),
+    sendMail(env, confirmationMail(env, ev, reg)),
     sendMail(env, {
       to: env.ORG_EMAIL,
       replyTo: email,
@@ -384,6 +390,15 @@ app.get('/admin/registrations.csv', async (c) => {
   return new Response(`\uFEFF${csv}`, {
     headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="registrations.csv"' },
   });
+});
+
+app.post('/admin/registrations/:id/resend', async (c) => {
+  const r = await c.env.DB.prepare('SELECT * FROM registrations WHERE id = ?1 OR ticket = ?1').bind(c.req.param('id')).first();
+  if (!r) throw new HttpError(404, 'Registration not found.');
+  const reg = rowToReg(r);
+  const ev = (await getEvent(c.env.DB, reg.eventId)) || { title: reg.eventTitle };
+  const sent = await sendMail(c.env, confirmationMail(c.env, ev, reg));
+  return c.json({ ok: sent, to: reg.email });
 });
 
 app.delete('/admin/registrations/:id', async (c) => {
