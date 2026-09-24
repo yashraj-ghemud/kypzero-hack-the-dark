@@ -1,6 +1,7 @@
 // KYPZERO API on Cloudflare Pages Functions + D1. Every /api/* request lands here.
 import { Hono } from 'hono';
 import { handle } from 'hono/cloudflare-pages';
+import { confirmationMail, intakeReportMail, signalMail, signalReceivedMail, localToDate } from '../../lib/mail.js';
 
 const app = new Hono().basePath('/api');
 
@@ -14,25 +15,7 @@ class HttpError extends Error {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^\+?[0-9][0-9\s-]{6,17}$/;
 const str = (v, max) => String(v ?? '').trim().slice(0, max);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, '0')).join('');
-
-// Event dates are wall-clock strings ("2026-10-31T18:00") in the organiser's timezone.
-function localToDate(s, offset) {
-  if (!s) return null;
-  if (/(Z|[+-]\d\d:\d\d)$/.test(s)) return new Date(s);
-  const full = s.length === 10 ? `${s}T00:00:00` : s.length === 16 ? `${s}:00` : s;
-  return new Date(`${full}${offset}`);
-}
-
-function fmtEventDate(s) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(s || '');
-  if (!m) return 'To be announced';
-  const d = new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)));
-  return d.toLocaleString('en-IN', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', ...(m[4] ? { hour: '2-digit', minute: '2-digit' } : {}) });
-}
-
-const fmtStamp = (iso, env) => new Date(iso).toLocaleString('en-IN', { timeZone: env.TIMEZONE || 'Asia/Kolkata' });
 
 function deadlinePassed(ev, env) {
   if (!ev.deadline) return false;
@@ -90,6 +73,12 @@ async function counts(db) {
   return new Map(results.map((r) => [r.event_id, r.n]));
 }
 
+// Position of a registration within its event ("soul #7"), used in the emails.
+async function soulNumber(db, reg) {
+  const r = await db.prepare('SELECT COUNT(*) AS n FROM registrations WHERE event_id = ? AND created_at <= ?').bind(reg.eventId, reg.createdAt).first();
+  return r.n;
+}
+
 async function saveEvent(db, ev) {
   const { id, createdAt, ...data } = ev;
   await db.prepare('INSERT INTO events (id, data, created_at) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET data = ?2')
@@ -123,46 +112,6 @@ async function sendMail(env, opts) {
     console.error('[mail] failed:', e.message);
     return false;
   }
-}
-
-function shell(env, content) {
-  const site = esc(env.SITE_URL);
-  return `<!doctype html><html><body style="margin:0;background:#050203;padding:32px 12px;font-family:'Courier New',Courier,monospace;color:#e8dcc8">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#0c0507;border:1px solid #5a0d14">
-<tr><td style="padding:30px 32px 22px;border-bottom:1px solid #3a0a0f;text-align:center">
-<div style="font-size:11px;letter-spacing:6px;color:#d0142c">TRANSMISSION FROM SECTOR ZERO</div>
-<div style="font-family:Georgia,'Times New Roman',serif;font-size:34px;letter-spacing:12px;color:#e8dcc8;margin-top:12px">KYPZERO</div>
-<div style="font-size:11px;letter-spacing:4px;color:#8a7a72;margin-top:6px">HACK THE DARK</div></td></tr>
-<tr><td style="padding:28px 32px;font-size:14px;line-height:1.75;color:#e8dcc8">${content}</td></tr>
-<tr><td style="padding:18px 32px;border-top:1px solid #3a0a0f;font-size:11px;line-height:1.6;color:#7a6a64;text-align:center">
-Sent from <a href="${site}" style="color:#d0142c">${site}</a><br>Questions? Just reply, or write to ${esc(env.ORG_EMAIL)}</td></tr>
-</table></td></tr></table></body></html>`;
-}
-
-const row = (label, value) => `<tr><td style="padding:6px 0;color:#8a7a72;font-size:11px;letter-spacing:2px;width:120px;vertical-align:top">${label}</td><td style="padding:6px 0;color:#e8dcc8">${esc(value)}</td></tr>`;
-
-// The participant's confirmation email (also used by the admin "resend" action).
-function confirmationMail(env, ev, reg) {
-  const { name, email, phone, college } = reg;
-  return {
-    to: email,
-    subject: `Pact sealed: ${ev.title} [${reg.ticket}]`,
-    text: `${name}, the pact is sealed.\n\nYou are registered for ${ev.title}.\nTicket: ${reg.ticket}\nWhen: ${fmtEventDate(ev.date)}\nWhere: ${ev.venue || 'TBA'}\n\n- KYPZERO`,
-    html: shell(env, `
-<p style="margin:0 0 14px">${esc(name)},</p>
-<p style="margin:0 0 18px">The pact is sealed. Your name has been written into the servers of Sector Zero.
-You are registered for <b style="color:#ff3b1f">${esc(ev.title)}</b>.</p>
-<div style="border:1px dashed #b3001b;padding:16px 18px;margin:0 0 20px;text-align:center">
-<div style="font-size:11px;letter-spacing:4px;color:#8a7a72">YOUR TICKET</div>
-<div style="font-size:28px;letter-spacing:6px;color:#ff3b1f;margin-top:6px">${esc(reg.ticket)}</div></div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-${row('EVENT', ev.title)}${row('WHEN', fmtEventDate(ev.date))}${row('WHERE', ev.venue || 'To be announced')}
-${ev.teamSize ? row('TEAM SIZE', ev.teamSize) : ''}${row('NAME', name)}${row('COLLEGE', college)}${row('PHONE', phone)}
-</table>
-<p style="margin:22px 0 0">Keep this ticket. We will contact you with further instructions before the ritual begins.</p>
-<p style="margin:14px 0 0;color:#8a7a72;font-style:italic">Don't look back.</p>`),
-  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,16 +200,10 @@ app.post('/register', limiter(8, 10 * 60 * 1000), async (c) => {
   if (!result.meta.changes) throw new HttpError(409, 'Every seat is taken. The circle is full.');
 
   const env = c.env;
+  const info = { soulNo: await soulNumber(db, reg), seats: ev.seats || 0 };
   const [emailSent] = await Promise.all([
-    sendMail(env, confirmationMail(env, ev, reg)),
-    sendMail(env, {
-      to: env.ORG_EMAIL,
-      replyTo: email,
-      subject: `New registration: ${ev.title} (${name})`,
-      text: `New registration for ${ev.title}\n\nTicket: ${reg.ticket}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nCollege: ${college}\nTime: ${reg.createdAt}`,
-      html: shell(env, `<p style="margin:0 0 14px">A new soul signed the pact for <b style="color:#ff3b1f">${esc(ev.title)}</b>.</p>
-<table role="presentation" width="100%">${row('TICKET', reg.ticket)}${row('NAME', name)}${row('EMAIL', email)}${row('PHONE', phone)}${row('COLLEGE', college)}${row('TIME', fmtStamp(reg.createdAt, env))}</table>`),
-    }),
+    sendMail(env, confirmationMail(env, ev, reg, info)),
+    sendMail(env, intakeReportMail(env, ev, reg, info)),
   ]);
   return c.json({ ok: true, ticket: reg.ticket, emailSent });
 });
@@ -277,22 +220,13 @@ app.post('/contact', limiter(5, 10 * 60 * 1000), async (c) => {
   if (message.length < 5) fields.message = 'Say a little more.';
   if (Object.keys(fields).length) throw new HttpError(400, 'Some fields need attention.', fields);
 
+  const createdAt = new Date().toISOString();
   await c.env.DB.prepare('INSERT INTO messages (id, name, email, message, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), name, email, message, new Date().toISOString()).run();
+    .bind(crypto.randomUUID(), name, email, message, createdAt).run();
   const env = c.env;
   const [delivered] = await Promise.all([
-    sendMail(env, {
-      to: env.ORG_EMAIL, replyTo: email, subject: `Signal received from ${name}`,
-      text: `From: ${name} <${email}>\n\n${message}`,
-      html: shell(env, `<table role="presentation" width="100%">${row('FROM', name)}${row('EMAIL', email)}</table>
-<p style="margin:18px 0 0;white-space:pre-wrap">${esc(message)}</p>`),
-    }),
-    sendMail(env, {
-      to: email, subject: 'Your signal reached Sector Zero',
-      text: `${name}, we received your message. Someone will answer from the dark soon.\n\n- KYPZERO`,
-      html: shell(env, `<p style="margin:0 0 14px">${esc(name)},</p><p style="margin:0">Your signal reached us. Someone will answer from the dark soon.</p>
-<p style="margin:14px 0 0;color:#8a7a72;font-style:italic">Stay near the light.</p>`),
-    }),
+    sendMail(env, signalMail(env, { name, email, message, createdAt })),
+    sendMail(env, signalReceivedMail(env, { name, email })),
   ]);
   return c.json({ ok: true, emailSent: delivered });
 });
@@ -307,12 +241,16 @@ app.get('/admin/check', (c) => c.json({
   from: c.env.MAIL_FROM, storage: 'd1', storageReady: true,
 }));
 
+// Sends the organiser a preview of the participant's ticket email with sample data.
 app.post('/admin/test-mail', async (c) => {
-  const sent = await sendMail(c.env, {
-    to: c.env.ORG_EMAIL, subject: 'Test transmission from Sector Zero',
-    text: 'If you can read this, email delivery works.',
-    html: shell(c.env, '<p style="margin:0">If you can read this, email delivery works. The pact emails will arrive like this one.</p>'),
-  });
+  const row = await c.env.DB.prepare("SELECT * FROM events ORDER BY json_extract(data, '$.date') LIMIT 1").first();
+  const ev = row ? rowToEvent(row) : { title: 'NIGHTMARE.EXE', date: '2026-10-31T18:00', venue: 'Sector Zero', seats: 150 };
+  const sample = {
+    name: 'Test Subject', email: c.env.ORG_EMAIL, phone: '+91 98765 43210', college: 'Institute of the Dark',
+    ticket: 'KZ-TEST13', createdAt: new Date().toISOString(),
+  };
+  const mail = confirmationMail(c.env, ev, sample, { soulNo: 13, seats: ev.seats || 0 });
+  const sent = await sendMail(c.env, { ...mail, subject: `[PREVIEW] ${mail.subject}` });
   return c.json({ ok: sent, mail: c.env.BREVO_API_KEY ? 'live' : 'dry-run' });
 });
 
@@ -397,7 +335,7 @@ app.post('/admin/registrations/:id/resend', async (c) => {
   if (!r) throw new HttpError(404, 'Registration not found.');
   const reg = rowToReg(r);
   const ev = (await getEvent(c.env.DB, reg.eventId)) || { title: reg.eventTitle };
-  const sent = await sendMail(c.env, confirmationMail(c.env, ev, reg));
+  const sent = await sendMail(c.env, confirmationMail(c.env, ev, reg, { soulNo: await soulNumber(c.env.DB, reg), seats: ev.seats || 0 }));
   return c.json({ ok: sent, to: reg.email });
 });
 
